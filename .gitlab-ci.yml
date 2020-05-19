@@ -1,0 +1,39 @@
+variables:
+  # Image name and 'release'-tag to build
+  IMAGE_NAME: my-image-name
+  RELEASE_TAG: stable
+  
+  # We could also use the Git-Hash here using $CI_COMMIT_SHORT_SHA
+  BUILD_TAG: latest
+
+  # We will use this image to build our container
+  BUILD_IMAGE: myname/toolbox:v1
+
+stages:
+  - build
+  - test
+  - release
+
+# build/push image using buildah and $BUILD_TAG
+build:
+  image: ${BUILD_IMAGE}
+  stage: build
+  script:
+    - buildah bud --pull -t "${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}" .
+    - buildah push  --creds "${REGISTRY_USER}:${REGISTRY_PASS}" "${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}"
+
+# Use built image for poor man's testing
+test:
+  image: "${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}"
+  stage: test
+  script:
+    - echo "I'm alive!"
+
+# Retag image from BUILD_TAG to RELEASE_TAG on master-branch only
+release:
+  image: ${BUILD_IMAGE}
+  stage: release
+  script:
+    - skopeo copy --screds "${REGISTRY_USER}:${REGISTRY_PASS}" --dcreds "${REGISTRY_USER}:${REGISTRY_PASS}" "docker://${REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}" "docker://${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG}"
+  only:
+    - master
